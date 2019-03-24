@@ -26,6 +26,8 @@ type (
 	MessageReadHandler func(Event, MessageOpts, Read)
 	// MessageEchoHandler is called when a message is sent by your page
 	MessageEchoHandler func(Event, MessageOpts, MessageEcho)
+	//ReferralHandler is called when a referral is received
+	ReferralHandler func(Event, MessageOpts, Referral)
 )
 
 // DebugType describes available debug type options as documented on https://developers.facebook.com/docs/graph-api/using-graph-api#debugging
@@ -54,8 +56,9 @@ type Messenger struct {
 	Authentication   AuthenticationHandler
 	MessageRead      MessageReadHandler
 	MessageEcho      MessageEchoHandler
+	Referral         ReferralHandler
 
-	Client 			*http.Client
+	Client *http.Client
 }
 
 // Handler is the main HTTP handler for the Messenger service.
@@ -78,6 +81,7 @@ func (m *Messenger) Handler(rw http.ResponseWriter, req *http.Request) {
 
 func (m *Messenger) handlePOST(rw http.ResponseWriter, req *http.Request) {
 	read, err := ioutil.ReadAll(req.Body)
+	fmt.Println(string(read))
 
 	if err != nil {
 		rw.WriteHeader(http.StatusBadRequest)
@@ -115,12 +119,21 @@ func (m *Messenger) handlePOST(rw http.ResponseWriter, req *http.Request) {
 					go m.MessageReceived(entry.Event, message.MessageOpts, message.Message.ReceivedMessage)
 				}
 			} else if message.Postback != nil {
+				if message.Postback.Referral != nil {
+					if m.Referral != nil {
+						go m.Referral(entry.Event, message.MessageOpts, *message.Postback.Referral)
+					}
+				}
 				if m.Postback != nil {
 					go m.Postback(entry.Event, message.MessageOpts, *message.Postback)
 				}
 			} else if message.Read != nil {
 				if m.MessageRead != nil {
 					go m.MessageRead(entry.Event, message.MessageOpts, *message.Read)
+				}
+			} else if message.Referral != nil {
+				if m.Referral != nil {
+					go m.Referral(entry.Event, message.MessageOpts, *message.Referral)
 				}
 			} else if m.Authentication != nil {
 				go m.Authentication(entry.Event, message.MessageOpts, message.Optin)
